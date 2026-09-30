@@ -1,0 +1,4527 @@
+import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await Supabase.initialize(
+    url: 'https://zdbshxnpqsgmkxhxvtxx.supabase.co',
+    anonKey: 'sb_publishable_am623zf0sbWP84QeoEUjJA_6JLNRr2R',
+  );
+
+  runApp(const MobiCashApp());
+}
+
+// ============================================================
+// SUPABASE CLIENT
+// ============================================================
+
+final supabase = Supabase.instance.client;
+
+// ============================================================
+// MOBICASH APP
+// ============================================================
+
+class MobiCashApp extends StatelessWidget {
+  const MobiCashApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'MobiCash',
+      theme: ThemeData(
+        useMaterial3: true,
+        colorSchemeSeed: Colors.green,
+        scaffoldBackgroundColor: const Color(0xFFF7F9F8),
+      ),
+      home: const AuthGate(),
+    );
+  }
+}
+
+// ============================================================
+// AUTH GATE
+// ============================================================
+
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<AuthState>(
+      stream: supabase.auth.onAuthStateChange,
+      builder: (context, snapshot) {
+        final session = supabase.auth.currentSession;
+
+        if (session != null) {
+          return const HomePage();
+        }
+
+        return const GoogleLoginPage();
+      },
+    );
+  }
+}
+
+// ============================================================
+// GOOGLE LOGIN PAGE
+// ============================================================
+
+class GoogleLoginPage extends StatefulWidget {
+  const GoogleLoginPage({super.key});
+
+  @override
+  State<GoogleLoginPage> createState() => _GoogleLoginPageState();
+}
+
+class _GoogleLoginPageState extends State<GoogleLoginPage> {
+  bool loading = false;
+
+  Future<void> signInWithGoogle() async {
+    setState(() {
+      loading = true;
+    });
+
+    try {
+      final googleSignIn = GoogleSignIn(
+        serverClientId:
+            '32301703095-deoom7viftu7iimpkp9tn812qkmeucpp.apps.googleusercontent.com',
+      );
+
+      final googleUser = await googleSignIn.authenticate();
+
+      final googleAuth = googleUser.authentication;
+
+      final idToken = googleAuth.idToken;
+
+      if (idToken == null) {
+        throw Exception('Google ID token not found');
+      }
+
+      await supabase.auth.signInWithIdToken(
+        provider: OAuthProvider.google,
+        idToken: idToken,
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Google Login failed: $e',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          loading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              children: [
+                // LOGO
+                Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.phone_android,
+                    size: 55,
+                    color: Colors.green,
+                  ),
+                ),
+
+                const SizedBox(height: 25),
+
+                const Text(
+                  'MobiCash',
+                  style: TextStyle(
+                    fontSize: 34,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+
+                const SizedBox(height: 10),
+
+                const Text(
+                  'Sell Your Old Device',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+
+                const SizedBox(height: 8),
+
+                const Text(
+                  'Login to continue selling your device',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.grey,
+                    fontSize: 15,
+                  ),
+                ),
+
+                const SizedBox(height: 40),
+
+                // GOOGLE LOGIN BUTTON
+                SizedBox(
+                  width: double.infinity,
+                  height: 55,
+                  child: OutlinedButton.icon(
+                    onPressed: loading ? null : signInWithGoogle,
+                    icon: loading
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.account_circle,
+                            size: 28,
+                          ),
+                    label: Text(
+                      loading
+                          ? 'Signing in...'
+                          : 'Continue with Google',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                const Text(
+                  'Your account is securely managed by Supabase',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// HOME PAGE
+// ============================================================
+
+class HomePage extends StatelessWidget {
+  const HomePage({super.key});
+
+  Future<void> logout() async {
+    await supabase.auth.signOut();
+
+    try {
+      await GoogleSignIn().signOut();
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = supabase.auth.currentUser;
+
+    final name =
+        user?.userMetadata?['full_name'] ??
+        user?.userMetadata?['name'] ??
+        'User';
+
+    final email = user?.email ?? '';
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          'MobiCash',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        actions: [
+          IconButton(
+            onPressed: () async {
+              await logout();
+            },
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logout',
+          ),
+        ],
+      ),
+
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ==================================================
+            // WELCOME
+            // ==================================================
+
+            Text(
+              'Hi, $name 👋',
+              style: const TextStyle(
+                fontSize: 25,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(height: 6),
+
+            Text(
+              email,
+              style: const TextStyle(
+                color: Colors.grey,
+              ),
+            ),
+
+            const SizedBox(height: 25),
+
+            // ==================================================
+            // HERO CARD
+            // ==================================================
+
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(22),
+              decoration: BoxDecoration(
+                color: Colors.green,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.phone_android,
+                    color: Colors.white,
+                    size: 45,
+                  ),
+
+                  SizedBox(height: 15),
+
+                  Text(
+                    'Sell Your Old Device',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+
+                  SizedBox(height: 8),
+
+                  Text(
+                    'Get an instant estimated value for your used electronics',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                    ),
+                  ),
+
+                  SizedBox(height: 15),
+
+                  Text(
+                    'Fast • Simple • Transparent',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 30),
+
+            const Text(
+              'Choose Device',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(height: 15),
+
+            // ==================================================
+            // MOBILE PHONE
+            // ==================================================
+
+            Card(
+              child: ListTile(
+                contentPadding: const EdgeInsets.all(16),
+                leading: Container(
+                  width: 55,
+                  height: 55,
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.phone_android,
+                    color: Colors.green,
+                    size: 30,
+                  ),
+                ),
+                title: const Text(
+                  'Mobile Phone',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 17,
+                  ),
+                ),
+                subtitle: const Text(
+                  'Android / iPhone',
+                ),
+                trailing: const Icon(
+                  Icons.arrow_forward_ios,
+                  size: 18,
+                ),
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Mobile Phone selling flow coming next',
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // ==================================================
+            // SMART WATCH
+            // ==================================================
+
+            Card(
+              child: ListTile(
+                contentPadding: const EdgeInsets.all(16),
+                leading: Container(
+                  width: 55,
+                  height: 55,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.watch,
+                    size: 30,
+                  ),
+                ),
+                title: const Text(
+                  'Smart Watch',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                subtitle: const Text(
+                  'Coming Soon',
+                ),
+                trailing: const Text(
+                  'Soon',
+                  style: TextStyle(
+                    color: Colors.grey,
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // ==================================================
+            // AIRPODS
+            // ==================================================
+
+            Card(
+              child: ListTile(
+                contentPadding: const EdgeInsets.all(16),
+                leading: Container(
+                  width: 55,
+                  height: 55,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.headphones,
+                    size: 30,
+                  ),
+                ),
+                title: const Text(
+                  'AirPods / Earbuds',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                subtitle: const Text(
+                  'Coming Soon',
+                ),
+                trailing: const Text(
+                  'Soon',
+                  style: TextStyle(
+                    color: Colors.grey,
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // ==================================================
+            // TABLET
+            // ==================================================
+
+            Card(
+              child: ListTile(
+                contentPadding: const EdgeInsets.all(16),
+                leading: Container(
+                  width: 55,
+                  height: 55,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.tablet,
+                    size: 30,
+                  ),
+                ),
+                title: const Text(
+                  'Tablet',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                subtitle: const Text(
+                  'Coming Soon',
+                ),
+                trailing: const Text(
+                  'Soon',
+                  style: TextStyle(
+                    color: Colors.grey,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+  // ============================================================
+  // DEVICE DATA
+  // ============================================================
+
+  class DeviceData {
+  String type = '';
+  String brand = '';
+  String model = '';
+  String storage = '';
+
+  String working = 'Fully Working';
+  String power = 'Turns On';
+
+  String screen = 'Excellent';
+  String body = 'Like New';
+  String battery = 'Good';
+
+  String camera = 'Both Working';
+  String speakerMic = 'Both Working';
+  String charging = 'Normal';
+  String connectivity = 'Working';
+  String biometric = 'Working';
+  String simNetwork = 'Working';
+
+  String bill = 'Yes';
+  String warranty = 'No';
+  String accessories = 'No Box / Accessories';
+
+  // NEW AGE OPTIONS
+  String age = 'Below 3 Months';
+
+  String repair = 'No Repairs';
+  String waterDamage = 'No';
+
+  double basePrice = 0;
+  double finalPrice = 0;
+
+  String pickupMethod = 'Doorstep Pickup';
+  String pickupDate = 'Tomorrow';
+  String pickupTime = '10 AM – 1 PM';
+
+  String name = '';
+  String phone = '';
+  String address = '';
+  String city = '';
+  String pincode = '';
+
+  String paymentMethod = 'UPI';
+}
+
+final DeviceData device = DeviceData();
+
+// ============================================================
+// HOME PAGE
+// ============================================================
+
+class HomePage extends StatelessWidget {
+  const HomePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    final phoneNumber = user?.phoneNumber ?? 'Mobile user';
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          'MobiCash',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        actions: [
+
+          // PROFILE
+IconButton(
+  icon: const Icon(Icons.account_circle),
+  onPressed: () {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const ProfilePage(),
+      ),
+    );
+  },
+),
+          // HELP
+          IconButton(
+            icon: const Icon(Icons.help_outline),
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (_) => AlertDialog(
+                  title: const Text('How MobiCash Works'),
+                  content: const Text(
+                    '1. Select your device\n'
+                    '2. Select brand and model\n'
+                    '3. Select storage\n'
+                    '4. Answer condition questions\n'
+                    '5. Get estimated value\n'
+                    '6. Choose pickup option\n'
+                    '7. Confirm your sale',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('OK'),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // HERO
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(22),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [
+                    Color(0xFF0B8F55),
+                    Color(0xFF16B66C),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(22),
+              ),
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Sell Your Old Device',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'Get an instant estimated value for your used electronics.',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                    ),
+                  ),
+                  SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.verified,
+                        color: Colors.white,
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        'Fast • Simple • Transparent',
+                        style: TextStyle(
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 25),
+
+            const Text(
+              'What do you want to sell?',
+              style: TextStyle(
+                fontSize: 21,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(height: 15),
+
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 14,
+              crossAxisSpacing: 14,
+              childAspectRatio: 1.1,
+              children: [
+                _deviceCard(
+                  context,
+                  Icons.smartphone,
+                  'Mobile Phone',
+                  'Sell your used phone',
+                  () {
+                    device.type = 'Mobile Phone';
+
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const MobileTypePage(),
+                      ),
+                    );
+                  },
+                ),
+                _deviceCard(
+                  context,
+                  Icons.watch,
+                  'Smart Watch',
+                  'Sell your smartwatch',
+                  () {
+                    _comingSoon(context);
+                  },
+                ),
+                _deviceCard(
+                  context,
+                  Icons.headphones,
+                  'AirPods / Earbuds',
+                  'Sell your earbuds',
+                  () {
+                    _comingSoon(context);
+                  },
+                ),
+                _deviceCard(
+                  context,
+                  Icons.tablet_mac,
+                  'Tablet',
+                  'Sell your tablet',
+                  () {
+                    _comingSoon(context);
+                  },
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 25),
+
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Why sell with MobiCash?',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  SizedBox(height: 14),
+                  _Benefit(
+                    icon: Icons.speed,
+                    title: 'Quick valuation',
+                    text:
+                        'Answer a few questions and see an estimate.',
+                  ),
+                  _Benefit(
+                    icon: Icons.home,
+                    title: 'Doorstep pickup',
+                    text:
+                        'Choose a convenient pickup slot.',
+                  ),
+                  _Benefit(
+                    icon: Icons.payments,
+                    title: 'Easy payment',
+                    text:
+                        'Get paid through your selected payment method.',
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _deviceCard(
+    BuildContext context,
+    IconData icon,
+    String title,
+    String subtitle,
+    VoidCallback onTap,
+  ) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: Colors.grey.shade200,
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 44,
+              color: Colors.green.shade700,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _comingSoon(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'This category will be added soon. Mobile selling is available now.',
+        ),
+      ),
+    );
+  }
+}
+
+
+class MyOrdersPage extends StatelessWidget {
+  const MyOrdersPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      return const Scaffold(
+        body: Center(
+          child: Text('Please login again'),
+        ),
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('My Orders'),
+      ),
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: FirebaseFirestore.instance
+            .collection('orders')
+            .where('userId', isEqualTo: user.uid)
+            .snapshots(),
+        builder: (context, snapshot) {
+          // Loading
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
+          }
+
+          // Error
+          if (snapshot.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Text(
+                  'Failed to load orders.\n\n${snapshot.error}',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            );
+          }
+
+          final orders = snapshot.data?.docs ?? [];
+
+          // No orders
+          if (orders.isEmpty) {
+            return const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.receipt_long_outlined,
+                    size: 70,
+                    color: Colors.grey,
+                  ),
+                  SizedBox(height: 15),
+                  Text(
+                    'No Orders Yet',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'Your device selling orders will appear here.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.grey,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: orders.length,
+            itemBuilder: (context, index) {
+              final data = orders[index].data();
+
+              final brand = data['brand'] ?? '';
+              final model = data['model'] ?? '';
+              final storage = data['storage'] ?? '-';
+              final orderId = data['orderId'] ?? '-';
+              final finalPrice = data['finalPrice'] ?? 0;
+              final pickupDate = data['pickupDate'] ?? '-';
+              final pickupTime = data['pickupTime'] ?? '-';
+              final status = data['status'] ?? 'Confirmed';
+              final paymentMethod =
+                  data['paymentMethod'] ?? '-';
+
+              return Card(
+                margin: const EdgeInsets.only(bottom: 16),
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // DEVICE
+                      Row(
+                        children: [
+                          Container(
+                            width: 50,
+                            height: 50,
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade50,
+                              borderRadius:
+                                  BorderRadius.circular(14),
+                            ),
+                            child: const Icon(
+                              Icons.phone_android,
+                              color: Colors.green,
+                              size: 28,
+                            ),
+                          ),
+
+                          const SizedBox(width: 12),
+
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '$brand $model',
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  storage,
+                                  style: TextStyle(
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          Text(
+                            '₹${(finalPrice as num).round()}',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 18),
+
+                      const Divider(),
+
+                      const SizedBox(height: 10),
+
+                      // ORDER ID
+                      _orderInfo(
+                        Icons.receipt_long,
+                        'Order ID',
+                        orderId.toString(),
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // PICKUP
+                      _orderInfo(
+                        Icons.calendar_month,
+                        'Pickup',
+                        '$pickupDate • $pickupTime',
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // PAYMENT
+                      _orderInfo(
+                        Icons.account_balance_wallet,
+                        'Payment',
+                        paymentMethod.toString(),
+                      ),
+
+                      const SizedBox(height: 15),
+
+                      // STATUS
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          borderRadius:
+                              BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.check_circle,
+                              color: Colors.green.shade700,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Status: $status',
+                              style: TextStyle(
+                                color: Colors.green.shade700,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  static Widget _orderInfo(
+    IconData icon,
+    String title,
+    String value,
+  ) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          icon,
+          size: 20,
+          color: Colors.grey.shade600,
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ============================================================
+// BENEFIT
+// ============================================================
+
+class _Benefit extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String text;
+
+  const _Benefit({
+    required this.icon,
+    required this.title,
+    required this.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 13),
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            color: Colors.green,
+            size: 28,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  text,
+                  style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================
+// MOBILE TYPE PAGE
+// ============================================================
+
+class MobileTypePage extends StatelessWidget {
+  const MobileTypePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Select Phone Type'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'What type of phone do you have?',
+              style: TextStyle(
+                fontSize: 23,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            _typeCard(
+              context,
+              Icons.android,
+              'Android',
+              'Samsung, OnePlus, Xiaomi, Vivo, OPPO and more',
+              () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AndroidBrandPage(),
+                  ),
+                );
+              },
+            ),
+
+            const SizedBox(height: 15),
+
+            _typeCard(
+              context,
+              Icons.apple,
+              'iPhone',
+              'Apple iPhone models',
+              () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const IPhoneModelPage(),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _typeCard(
+    BuildContext context,
+    IconData icon,
+    String title,
+    String subtitle,
+    VoidCallback onTap,
+  ) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: Colors.grey.shade200,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 45,
+              color: Colors.green.shade700,
+            ),
+            const SizedBox(width: 18),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.arrow_forward_ios,
+              size: 18,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// ANDROID BRAND PAGE
+// ============================================================
+
+class AndroidBrandPage extends StatelessWidget {
+  const AndroidBrandPage({super.key});
+
+  static const brands = [
+    'Samsung',
+    'OnePlus',
+    'Xiaomi',
+    'Redmi',
+    'Vivo',
+    'OPPO',
+    'Realme',
+    'Motorola',
+    'Nothing',
+    'Google',
+    'POCO',
+    'iQOO',
+    'Honor',
+    'ASUS',
+    'Nokia',
+    'Lenovo',
+    'LG',
+    'Infinix',
+    'Tecno',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Select Brand'),
+      ),
+      body: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: brands.length,
+        itemBuilder: (context, index) {
+          final brand = brands[index];
+
+          return Card(
+            margin: const EdgeInsets.only(bottom: 10),
+            child: ListTile(
+              leading: CircleAvatar(
+                backgroundColor: Colors.green.shade50,
+                child: Icon(
+                  Icons.phone_android,
+                  color: Colors.green.shade700,
+                ),
+              ),
+              title: Text(
+                brand,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              trailing: const Icon(
+                Icons.arrow_forward_ios,
+                size: 16,
+              ),
+              onTap: () {
+                device.brand = brand;
+
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => AndroidModelPage(
+                      brand: brand,
+                    ),
+                  ),
+                );
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ============================================================
+// ANDROID MODEL PAGE
+// ============================================================
+
+class AndroidModelPage extends StatelessWidget {
+  final String brand;
+
+  const AndroidModelPage({
+    super.key,
+    required this.brand,
+  });
+
+  static const Map<String, List<String>> models = {
+    'Samsung': [
+      'Galaxy S26 Ultra',
+      'Galaxy S26+',
+      'Galaxy S26',
+      'Galaxy S25 Ultra',
+      'Galaxy S25+',
+      'Galaxy S25',
+      'Galaxy S24 Ultra',
+      'Galaxy S24+',
+      'Galaxy S24',
+      'Galaxy S23 Ultra',
+      'Galaxy S23+',
+      'Galaxy S23',
+      'Galaxy S22 Ultra',
+      'Galaxy S22+',
+      'Galaxy S22',
+      'Galaxy S21 Ultra',
+      'Galaxy S21+',
+      'Galaxy S21',
+      'Galaxy Note 20 Ultra',
+      'Galaxy Note 20',
+      'Galaxy A56',
+      'Galaxy A55',
+      'Galaxy A54',
+      'Galaxy A35',
+      'Galaxy A34',
+      'Galaxy A25',
+      'Galaxy A15',
+    ],
+
+    'OnePlus': [
+      'OnePlus 13',
+      'OnePlus 13R',
+      'OnePlus 12',
+      'OnePlus 12R',
+      'OnePlus 11',
+      'OnePlus 11R',
+      'OnePlus 10 Pro',
+      'OnePlus 10T',
+      'OnePlus 10R',
+      'OnePlus 9 Pro',
+      'OnePlus 9',
+      'OnePlus Nord 5',
+      'OnePlus Nord 4',
+      'OnePlus Nord 3',
+      'OnePlus Nord CE 4',
+      'OnePlus Nord CE 3',
+    ],
+
+    'Xiaomi': [
+      'Xiaomi 15',
+      'Xiaomi 15 Pro',
+      'Xiaomi 14',
+      'Xiaomi 14 Ultra',
+      'Xiaomi 13 Pro',
+      'Xiaomi 13',
+      'Xiaomi 12 Pro',
+      'Xiaomi 12',
+      'Xiaomi 11 Ultra',
+    ],
+
+    'Redmi': [
+      'Redmi Note 15 Pro+',
+      'Redmi Note 15 Pro',
+      'Redmi Note 14 Pro+',
+      'Redmi Note 14 Pro',
+      'Redmi Note 14',
+      'Redmi Note 13 Pro+',
+      'Redmi Note 13 Pro',
+      'Redmi Note 13',
+      'Redmi Note 12 Pro+',
+      'Redmi Note 12 Pro',
+      'Redmi Note 12',
+      'Redmi 14C',
+      'Redmi 13C',
+    ],
+
+    'Vivo': [
+      'Vivo X200 Pro',
+      'Vivo X200',
+      'Vivo X100 Pro',
+      'Vivo X100',
+      'Vivo V50',
+      'Vivo V40',
+      'Vivo V30',
+      'Vivo V29',
+      'Vivo V27',
+      'Vivo Y200',
+      'Vivo Y100',
+    ],
+
+    'OPPO': [
+      'OPPO Find X8 Pro',
+      'OPPO Find X8',
+      'OPPO Find X7',
+      'OPPO Reno 13 Pro',
+      'OPPO Reno 13',
+      'OPPO Reno 12 Pro',
+      'OPPO Reno 12',
+      'OPPO Reno 11 Pro',
+      'OPPO Reno 11',
+      'OPPO A5 Pro',
+      'OPPO A3 Pro',
+    ],
+
+    'Realme': [
+      'Realme GT 7 Pro',
+      'Realme GT 6',
+      'Realme GT 5',
+      'Realme GT Neo 6',
+      'Realme 14 Pro+',
+      'Realme 14 Pro',
+      'Realme 13 Pro+',
+      'Realme 13 Pro',
+      'Realme Narzo 70 Pro',
+      'Realme Narzo 70',
+    ],
+
+    'Motorola': [
+      'Motorola Edge 60 Pro',
+      'Motorola Edge 60',
+      'Motorola Edge 50 Ultra',
+      'Motorola Edge 50 Pro',
+      'Motorola Edge 50 Fusion',
+      'Moto G85',
+      'Moto G75',
+      'Moto G64',
+      'Moto G54',
+    ],
+
+    'Nothing': [
+      'Nothing Phone (3)',
+      'Nothing Phone (3a) Pro',
+      'Nothing Phone (3a)',
+      'Nothing Phone (2)',
+      'Nothing Phone (2a) Plus',
+      'Nothing Phone (2a)',
+    ],
+
+    'Google': [
+      'Pixel 10 Pro XL',
+      'Pixel 10 Pro',
+      'Pixel 10',
+      'Pixel 9 Pro XL',
+      'Pixel 9 Pro',
+      'Pixel 9',
+      'Pixel 8 Pro',
+      'Pixel 8',
+      'Pixel 7 Pro',
+      'Pixel 7',
+      'Pixel 6 Pro',
+      'Pixel 6',
+    ],
+
+    'POCO': [
+      'POCO F7 Ultra',
+      'POCO F7 Pro',
+      'POCO F7',
+      'POCO X7 Pro',
+      'POCO X7',
+      'POCO X6 Pro',
+      'POCO X6',
+      'POCO F6',
+      'POCO F5',
+    ],
+
+    'iQOO': [
+      'iQOO 13',
+      'iQOO 12',
+      'iQOO 11',
+      'iQOO 10',
+      'iQOO Neo 10',
+      'iQOO Neo 9 Pro',
+      'iQOO Z10',
+      'iQOO Z9',
+    ],
+
+    'Honor': [
+      'Honor Magic7 Pro',
+      'Honor Magic6 Pro',
+      'Honor 400 Pro',
+      'Honor 200 Pro',
+      'Honor 200',
+      'Honor X9c',
+      'Honor X9b',
+    ],
+
+    'ASUS': [
+      'ROG Phone 9 Pro',
+      'ROG Phone 8 Pro',
+      'Zenfone 12 Ultra',
+      'Zenfone 11 Ultra',
+    ],
+
+    'Nokia': [
+      'Nokia X30',
+      'Nokia G60',
+      'Nokia G42',
+      'Nokia G22',
+      'Nokia C32',
+    ],
+
+    'Lenovo': [
+      'Lenovo Legion Phone Duel',
+      'Lenovo K14',
+      'Lenovo K13',
+    ],
+
+    'LG': [
+      'LG Wing',
+      'LG Velvet',
+      'LG V60',
+      'LG G8',
+    ],
+
+    'Infinix': [
+      'Infinix GT 30 Pro',
+      'Infinix GT 20 Pro',
+      'Infinix Note 50 Pro',
+      'Infinix Note 40 Pro',
+      'Infinix Hot 50 Pro+',
+    ],
+
+    'Tecno': [
+      'Tecno Phantom V Fold2',
+      'Tecno Phantom V Fold',
+      'Tecno Camon 40 Pro',
+      'Tecno Camon 30 Pro',
+      'Tecno Pova 6 Pro',
+    ],
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final brandModels = models[brand] ?? [];
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('$brand Models'),
+      ),
+      body: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: brandModels.length,
+        itemBuilder: (context, index) {
+          final model = brandModels[index];
+
+          return Card(
+            margin: const EdgeInsets.only(bottom: 9),
+            child: ListTile(
+              leading: const Icon(Icons.smartphone),
+              title: Text(model),
+              trailing: const Icon(
+                Icons.arrow_forward_ios,
+                size: 16,
+              ),
+              onTap: () {
+                device.brand = brand;
+                device.model = model;
+
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => VariantPage(
+                      model: model,
+                    ),
+                  ),
+                );
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ============================================================
+// IPHONE MODEL PAGE
+// ============================================================
+
+class IPhoneModelPage extends StatelessWidget {
+  const IPhoneModelPage({super.key});
+
+  static const models = [
+    'iPhone 18 Pro Max',
+    'iPhone 18 Pro',
+    'iPhone 18',
+    'iPhone 18 Plus',
+    'iPhone 17 Pro Max',
+    'iPhone 17 Pro',
+    'iPhone 17',
+    'iPhone Air',
+    'iPhone 17e',
+    'iPhone 16 Pro Max',
+    'iPhone 16 Pro',
+    'iPhone 16 Plus',
+    'iPhone 16',
+    'iPhone 16e',
+    'iPhone 15 Pro Max',
+    'iPhone 15 Pro',
+    'iPhone 15 Plus',
+    'iPhone 15',
+    'iPhone 14 Pro Max',
+    'iPhone 14 Pro',
+    'iPhone 14 Plus',
+    'iPhone 14',
+    'iPhone 13 Pro Max',
+    'iPhone 13 Pro',
+    'iPhone 13',
+    'iPhone 13 mini',
+    'iPhone 12 Pro Max',
+    'iPhone 12 Pro',
+    'iPhone 12',
+    'iPhone 12 mini',
+    'iPhone 11 Pro Max',
+    'iPhone 11 Pro',
+    'iPhone 11',
+    'iPhone XS Max',
+    'iPhone XS',
+    'iPhone XR',
+    'iPhone X',
+    'iPhone 8 Plus',
+    'iPhone 8',
+    'iPhone 7 Plus',
+    'iPhone 7',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Select iPhone'),
+      ),
+      body: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: models.length,
+        itemBuilder: (context, index) {
+          final model = models[index];
+
+          return Card(
+            margin: const EdgeInsets.only(bottom: 9),
+            child: ListTile(
+              leading: const Icon(Icons.apple),
+              title: Text(model),
+              trailing: const Icon(
+                Icons.arrow_forward_ios,
+                size: 16,
+              ),
+              onTap: () {
+                device.brand = 'Apple';
+                device.model = model;
+
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => VariantPage(
+                      model: model,
+                    ),
+                  ),
+                );
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ============================================================
+// STORAGE PAGE
+// ============================================================
+
+class VariantPage extends StatelessWidget {
+  final String model;
+
+  const VariantPage({
+    super.key,
+    required this.model,
+  });
+
+  List<String> getStorage() {
+    if (model.contains('iPhone 18') ||
+        model.contains('iPhone 17') ||
+        model.contains('iPhone 16') ||
+        model.contains('iPhone 15') ||
+        model.contains('iPhone 14')) {
+      return [
+        '128 GB',
+        '256 GB',
+        '512 GB',
+        '1 TB',
+      ];
+    }
+
+    if (model.contains('Pro Max')) {
+      return [
+        '256 GB',
+        '512 GB',
+        '1 TB',
+      ];
+    }
+
+    if (model.contains('Pro')) {
+      return [
+        '128 GB',
+        '256 GB',
+        '512 GB',
+        '1 TB',
+      ];
+    }
+
+    if (model.contains('iPhone 13') ||
+        model.contains('iPhone 12')) {
+      return [
+        '64 GB',
+        '128 GB',
+        '256 GB',
+      ];
+    }
+
+    if (model.contains('iPhone 11')) {
+      return [
+        '64 GB',
+        '128 GB',
+        '256 GB',
+      ];
+    }
+
+    return [
+      '64 GB',
+      '128 GB',
+      '256 GB',
+      '512 GB',
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final storageList = getStorage();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Select Storage'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              model,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Select your storage variant',
+              style: TextStyle(
+                color: Colors.grey.shade600,
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            ...storageList.map(
+              (storage) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Card(
+                  child: ListTile(
+                    title: Text(
+                      storage,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    trailing: const Icon(
+                      Icons.arrow_forward_ios,
+                      size: 16,
+                    ),
+                    onTap: () {
+                      device.storage = storage;
+
+                      device.basePrice = getBasePrice(
+                        device.brand,
+                        model,
+                        storage,
+                      );
+
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ConditionPage(),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// BASE PRICE
+// ============================================================
+
+double getBasePrice(
+  String brand,
+  String model,
+  String storage,
+) {
+  final Map<String, double> prices = {
+    'iPhone 18 Pro Max': 125000,
+    'iPhone 18 Pro': 110000,
+    'iPhone 18': 85000,
+    'iPhone 17 Pro Max': 105000,
+    'iPhone 17 Pro': 92000,
+    'iPhone 17': 72000,
+    'iPhone Air': 65000,
+    'iPhone 16 Pro Max': 85000,
+    'iPhone 16 Pro': 75000,
+    'iPhone 16 Plus': 65000,
+    'iPhone 16': 58000,
+    'iPhone 16e': 45000,
+    'iPhone 15 Pro Max': 70000,
+    'iPhone 15 Pro': 62000,
+    'iPhone 15 Plus': 52000,
+    'iPhone 15': 46000,
+    'iPhone 14 Pro Max': 55000,
+    'iPhone 14 Pro': 48000,
+    'iPhone 14 Plus': 43000,
+    'iPhone 14': 38000,
+    'iPhone 13 Pro Max': 47000,
+    'iPhone 13 Pro': 42000,
+    'iPhone 13': 33000,
+    'iPhone 13 mini': 28000,
+    'iPhone 12 Pro Max': 35000,
+    'iPhone 12 Pro': 31000,
+    'iPhone 12': 26000,
+    'iPhone 12 mini': 22000,
+    'iPhone 11 Pro Max': 28000,
+    'iPhone 11 Pro': 24000,
+    'iPhone 11': 20000,
+    'iPhone XS Max': 16000,
+    'iPhone XS': 14000,
+    'iPhone XR': 13000,
+    'iPhone X': 10000,
+    'iPhone 8 Plus': 8500,
+    'iPhone 8': 7000,
+    'iPhone 7 Plus': 6000,
+    'iPhone 7': 4500,
+
+    'Galaxy S26 Ultra': 90000,
+    'Galaxy S26+': 72000,
+    'Galaxy S26': 65000,
+    'Galaxy S25 Ultra': 76000,
+    'Galaxy S25+': 62000,
+    'Galaxy S25': 54000,
+    'Galaxy S24 Ultra': 62000,
+    'Galaxy S24+': 50000,
+    'Galaxy S24': 42000,
+    'Galaxy S23 Ultra': 48000,
+    'Galaxy S23+': 38000,
+    'Galaxy S23': 32000,
+    'Galaxy S22 Ultra': 38000,
+    'Galaxy S22+': 30000,
+    'Galaxy S22': 25000,
+
+    'OnePlus 13': 50000,
+    'OnePlus 13R': 35000,
+    'OnePlus 12': 42000,
+    'OnePlus 12R': 30000,
+    'OnePlus 11': 35000,
+    'OnePlus 11R': 27000,
+    'OnePlus 10 Pro': 28000,
+    'OnePlus 10T': 24000,
+    'OnePlus 10R': 22000,
+    'OnePlus 9 Pro': 22000,
+    'OnePlus 9': 18000,
+
+    'Xiaomi 15': 50000,
+    'Xiaomi 15 Pro': 60000,
+    'Xiaomi 14': 42000,
+    'Xiaomi 14 Ultra': 60000,
+    'Xiaomi 13 Pro': 42000,
+    'Xiaomi 13': 30000,
+
+    'Redmi Note 14 Pro+': 25000,
+    'Redmi Note 14 Pro': 21000,
+    'Redmi Note 14': 17000,
+    'Redmi Note 13 Pro+': 22000,
+    'Redmi Note 13 Pro': 18000,
+    'Redmi Note 13': 14000,
+
+    'Vivo X200 Pro': 55000,
+    'Vivo X200': 42000,
+    'Vivo X100 Pro': 50000,
+    'Vivo X100': 38000,
+    'Vivo V50': 30000,
+    'Vivo V40': 26000,
+    'Vivo V30': 22000,
+
+    'OPPO Find X8 Pro': 55000,
+    'OPPO Find X8': 42000,
+    'OPPO Reno 13 Pro': 30000,
+    'OPPO Reno 13': 24000,
+    'OPPO Reno 12 Pro': 26000,
+    'OPPO Reno 12': 21000,
+
+    'Realme GT 7 Pro': 42000,
+    'Realme GT 6': 30000,
+    'Realme GT 5': 25000,
+    'Realme 14 Pro+': 26000,
+    'Realme 13 Pro+': 23000,
+
+    'Pixel 10 Pro XL': 75000,
+    'Pixel 10 Pro': 65000,
+    'Pixel 10': 52000,
+    'Pixel 9 Pro XL': 62000,
+    'Pixel 9 Pro': 55000,
+    'Pixel 9': 45000,
+    'Pixel 8 Pro': 45000,
+    'Pixel 8': 34000,
+    'Pixel 7 Pro': 30000,
+    'Pixel 7': 23000,
+
+    'Nothing Phone (3)': 42000,
+    'Nothing Phone (3a) Pro': 28000,
+    'Nothing Phone (3a)': 22000,
+    'Nothing Phone (2)': 25000,
+    'Nothing Phone (2a)': 18000,
+
+    'POCO F7 Ultra': 40000,
+    'POCO F7 Pro': 33000,
+    'POCO F7': 28000,
+    'POCO X7 Pro': 22000,
+    'POCO X7': 18000,
+    'POCO F6': 23000,
+
+    'iQOO 13': 43000,
+    'iQOO 12': 36000,
+    'iQOO 11': 30000,
+    'iQOO Neo 10': 26000,
+    'iQOO Neo 9 Pro': 23000,
+
+    'Honor Magic7 Pro': 60000,
+    'Honor Magic6 Pro': 50000,
+    'Honor 400 Pro': 30000,
+    'Honor 200 Pro': 28000,
+
+    'ROG Phone 9 Pro': 55000,
+    'ROG Phone 8 Pro': 45000,
+  };
+
+  double base = prices[model] ?? 15000;
+
+  if (storage == '256 GB') {
+    base += 4000;
+  } else if (storage == '512 GB') {
+    base += 8000;
+  } else if (storage == '1 TB') {
+    base += 12000;
+  }
+
+  return base;
+}
+
+// ============================================================
+// CONDITION PAGE
+// ============================================================
+
+class ConditionPage extends StatefulWidget {
+  const ConditionPage({super.key});
+
+  @override
+  State<ConditionPage> createState() => _ConditionPageState();
+}
+
+class _ConditionPageState extends State<ConditionPage> {
+  final PageController pageController = PageController();
+
+  int currentPage = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Check Device Condition'),
+      ),
+      body: Column(
+        children: [
+          LinearProgressIndicator(
+            value: (currentPage + 1) / 8,
+          ),
+
+          Expanded(
+            child: PageView(
+              controller: pageController,
+              physics: const NeverScrollableScrollPhysics(),
+              children: [
+                _workingPage(),
+                _screenPage(),
+                _bodyPage(),
+                _batteryPage(),
+                _componentsPage(),
+                _connectivityPage(),
+                _documentsPage(),
+                _agePage(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void nextPage() {
+    if (currentPage < 7) {
+      setState(() {
+        currentPage++;
+      });
+
+      pageController.animateToPage(
+        currentPage,
+        duration: const Duration(
+          milliseconds: 300,
+        ),
+        curve: Curves.easeInOut,
+      );
+    } else {
+      calculatePrice();
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const QuotePage(),
+        ),
+      );
+    }
+  }
+
+  Widget questionPage({
+    required String title,
+    required String subtitle,
+    required Widget child,
+  }) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 12),
+
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+
+          const SizedBox(height: 7),
+
+          Text(
+            subtitle,
+            style: TextStyle(
+              color: Colors.grey.shade600,
+            ),
+          ),
+
+          const SizedBox(height: 25),
+
+          child,
+
+          const SizedBox(height: 30),
+
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: ElevatedButton(
+              onPressed: nextPage,
+              child: Text(
+                currentPage == 7
+                    ? 'Calculate My Value'
+                    : 'Continue',
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget option(
+    String title,
+    String groupValue,
+    String value,
+    ValueChanged<String?> onChanged,
+  ) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: RadioListTile<String>(
+        title: Text(title),
+        value: value,
+        groupValue: groupValue,
+        onChanged: onChanged,
+      ),
+    );
+  }
+
+  // ==========================================================
+  // WORKING
+  // ==========================================================
+
+  Widget _workingPage() {
+    return questionPage(
+      title: 'Does your phone work properly?',
+      subtitle:
+          'Tell us about the basic working condition of your device.',
+      child: Column(
+        children: [
+          option(
+            'Fully Working',
+            device.working,
+            'Fully Working',
+            (v) {
+              setState(() {
+                device.working = v!;
+              });
+            },
+          ),
+
+          option(
+            'Partially Working',
+            device.working,
+            'Partially Working',
+            (v) {
+              setState(() {
+                device.working = v!;
+              });
+            },
+          ),
+
+          option(
+            'Not Working',
+            device.working,
+            'Not Working',
+            (v) {
+              setState(() {
+                device.working = v!;
+              });
+            },
+          ),
+
+          const SizedBox(height: 10),
+
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Does the phone turn on?',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 17,
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+          option(
+            'Turns On',
+            device.power,
+            'Turns On',
+            (v) {
+              setState(() {
+                device.power = v!;
+              });
+            },
+          ),
+
+          option(
+            'Does Not Turn On',
+            device.power,
+            'Does Not Turn On',
+            (v) {
+              setState(() {
+                device.power = v!;
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================================
+  // SCREEN
+  // ==========================================================
+
+  Widget _screenPage() {
+    return questionPage(
+      title: 'How is the display?',
+      subtitle:
+          'Select the option that best describes your screen.',
+      child: Column(
+        children: [
+          option(
+            'Excellent — no visible damage',
+            device.screen,
+            'Excellent',
+            (v) {
+              setState(() {
+                device.screen = v!;
+              });
+            },
+          ),
+
+          option(
+            'Minor scratches',
+            device.screen,
+            'Minor Scratches',
+            (v) {
+              setState(() {
+                device.screen = v!;
+              });
+            },
+          ),
+
+          option(
+            'Major scratches',
+            device.screen,
+            'Major Scratches',
+            (v) {
+              setState(() {
+                device.screen = v!;
+              });
+            },
+          ),
+
+          option(
+            'Cracked display',
+            device.screen,
+            'Cracked',
+            (v) {
+              setState(() {
+                device.screen = v!;
+              });
+            },
+          ),
+
+          option(
+            'Lines / spots / touch issue',
+            device.screen,
+            'Display Issue',
+            (v) {
+              setState(() {
+                device.screen = v!;
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================================
+  // BODY
+  // ==========================================================
+
+  Widget _bodyPage() {
+    return questionPage(
+      title: 'How is the body?',
+      subtitle:
+          'Check the frame, back panel and overall appearance.',
+      child: Column(
+        children: [
+          option(
+            'Like New',
+            device.body,
+            'Like New',
+            (v) {
+              setState(() {
+                device.body = v!;
+              });
+            },
+          ),
+
+          option(
+            'Minor scratches',
+            device.body,
+            'Minor Scratches',
+            (v) {
+              setState(() {
+                device.body = v!;
+              });
+            },
+          ),
+
+          option(
+            'Heavy scratches / dents',
+            device.body,
+            'Heavy Damage',
+            (v) {
+              setState(() {
+                device.body = v!;
+              });
+            },
+          ),
+
+          option(
+            'Back panel broken',
+            device.body,
+            'Back Broken',
+            (v) {
+              setState(() {
+                device.body = v!;
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================================
+  // BATTERY
+  // ==========================================================
+
+  Widget _batteryPage() {
+    return questionPage(
+      title: 'How is the battery?',
+      subtitle:
+          'Select the current battery condition.',
+      child: Column(
+        children: [
+          option(
+            'Good',
+            device.battery,
+            'Good',
+            (v) {
+              setState(() {
+                device.battery = v!;
+              });
+            },
+          ),
+
+          option(
+            'Average',
+            device.battery,
+            'Average',
+            (v) {
+              setState(() {
+                device.battery = v!;
+              });
+            },
+          ),
+
+          option(
+            'Poor / needs replacement',
+            device.battery,
+            'Poor',
+            (v) {
+              setState(() {
+                device.battery = v!;
+              });
+            },
+          ),
+
+          if (device.brand == 'Apple') ...[
+            const SizedBox(height: 15),
+
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'iPhone Battery Health',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            DropdownButtonFormField<String>(
+              initialValue: '90–100%',
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(
+                  value: '90–100%',
+                  child: Text('90–100%'),
+                ),
+                DropdownMenuItem(
+                  value: '85–89%',
+                  child: Text('85–89%'),
+                ),
+                DropdownMenuItem(
+                  value: '80–84%',
+                  child: Text('80–84%'),
+                ),
+                DropdownMenuItem(
+                  value: 'Below 80%',
+                  child: Text('Below 80%'),
+                ),
+              ],
+              onChanged: (_) {},
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ==========================================================
+  // COMPONENTS
+  // ==========================================================
+
+  Widget _componentsPage() {
+    return questionPage(
+      title: 'Check the main components',
+      subtitle:
+          'Make sure these important components are working.',
+      child: Column(
+        children: [
+          _dropdown(
+            'Camera',
+            device.camera,
+            [
+              'Both Working',
+              'Rear Camera Issue',
+              'Front Camera Issue',
+              'Both Camera Issue',
+            ],
+            (v) {
+              setState(() {
+                device.camera = v!;
+              });
+            },
+          ),
+
+          const SizedBox(height: 14),
+
+          _dropdown(
+            'Speaker & Microphone',
+            device.speakerMic,
+            [
+              'Both Working',
+              'Speaker Issue',
+              'Microphone Issue',
+              'Both Issue',
+            ],
+            (v) {
+              setState(() {
+                device.speakerMic = v!;
+              });
+            },
+          ),
+
+          const SizedBox(height: 14),
+
+          _dropdown(
+            'Charging Port',
+            device.charging,
+            [
+              'Normal',
+              'Slow / Intermittent',
+              'Not Charging',
+            ],
+            (v) {
+              setState(() {
+                device.charging = v!;
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================================
+  // CONNECTIVITY
+  // ==========================================================
+
+  Widget _connectivityPage() {
+    return questionPage(
+      title: 'Connectivity & security',
+      subtitle:
+          'Check network, Wi-Fi, Bluetooth and biometric features.',
+      child: Column(
+        children: [
+          _dropdown(
+            'Wi-Fi / Bluetooth',
+            device.connectivity,
+            [
+              'Working',
+              'Issue',
+            ],
+            (v) {
+              setState(() {
+                device.connectivity = v!;
+              });
+            },
+          ),
+
+          const SizedBox(height: 14),
+
+          _dropdown(
+            'Fingerprint / Face ID',
+            device.biometric,
+            [
+              'Working',
+              'Not Working',
+              'Not Available',
+            ],
+            (v) {
+              setState(() {
+                device.biometric = v!;
+              });
+            },
+          ),
+
+          const SizedBox(height: 14),
+
+          _dropdown(
+            'SIM / Network',
+            device.simNetwork,
+            [
+              'Working',
+              'Network Issue',
+            ],
+            (v) {
+              setState(() {
+                device.simNetwork = v!;
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================================
+  // DOCUMENTS
+  // ==========================================================
+
+  Widget _documentsPage() {
+    return questionPage(
+      title: 'Do you have the original documents?',
+      subtitle:
+          'Bill and warranty can affect the estimated value.',
+      child: Column(
+        children: [
+          _dropdown(
+            'Original Bill',
+            device.bill,
+            [
+              'Yes',
+              'No',
+            ],
+            (v) {
+              setState(() {
+                device.bill = v!;
+              });
+            },
+          ),
+
+          const SizedBox(height: 14),
+
+          _dropdown(
+            'Warranty',
+            device.warranty,
+            [
+              'Yes',
+              'No',
+            ],
+            (v) {
+              setState(() {
+                device.warranty = v!;
+              });
+            },
+          ),
+
+          const SizedBox(height: 14),
+
+          _dropdown(
+            'Box / Accessories',
+            device.accessories,
+            [
+              'Full Box + Charger',
+              'Box Only',
+              'Charger Only',
+              'No Box / Accessories',
+            ],
+            (v) {
+              setState(() {
+                device.accessories = v!;
+              });
+            },
+          ),
+
+          const SizedBox(height: 14),
+
+          _dropdown(
+            'Repair History',
+            device.repair,
+            [
+              'No Repairs',
+              'Minor Repair',
+              'Major Repair',
+            ],
+            (v) {
+              setState(() {
+                device.repair = v!;
+              });
+            },
+          ),
+
+          const SizedBox(height: 14),
+
+          _dropdown(
+            'Water Damage',
+            device.waterDamage,
+            [
+              'No',
+              'Yes',
+            ],
+            (v) {
+              setState(() {
+                device.waterDamage = v!;
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================================
+  // AGE PAGE - UPDATED
+  // ==========================================================
+
+  Widget _agePage() {
+    return questionPage(
+      title: 'How old is your phone?',
+      subtitle:
+          'Select how long you have been using the device.',
+      child: Column(
+        children: [
+          option(
+            'Below 3 Months',
+            device.age,
+            'Below 3 Months',
+            (v) {
+              setState(() {
+                device.age = v!;
+              });
+            },
+          ),
+
+          option(
+            '3–6 Months',
+            device.age,
+            '3–6 Months',
+            (v) {
+              setState(() {
+                device.age = v!;
+              });
+            },
+          ),
+
+          option(
+            '6–11 Months',
+            device.age,
+            '6–11 Months',
+            (v) {
+              setState(() {
+                device.age = v!;
+              });
+            },
+          ),
+
+          option(
+            '1 Year+',
+            device.age,
+            '1 Year+',
+            (v) {
+              setState(() {
+                device.age = v!;
+              });
+            },
+          ),
+
+          const SizedBox(height: 10),
+
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.green.shade50,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Row(
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  color: Colors.green,
+                ),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Choose the option closest to your phone purchase/use period.',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================================
+  // DROPDOWN
+  // ==========================================================
+
+  Widget _dropdown(
+    String label,
+    String value,
+    List<String> values,
+    ValueChanged<String?> onChanged,
+  ) {
+    return DropdownButtonFormField<String>(
+      initialValue: values.contains(value)
+          ? value
+          : values.first,
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+      ),
+      items: values
+          .map(
+            (v) => DropdownMenuItem(
+              value: v,
+              child: Text(v),
+            ),
+          )
+          .toList(),
+      onChanged: onChanged,
+    );
+  }
+
+  // ==========================================================
+  // PRICE CALCULATION
+  // ==========================================================
+
+  void calculatePrice() {
+    double price = device.basePrice;
+
+    // --------------------------------------------------------
+    // WORKING CONDITION
+    // --------------------------------------------------------
+
+    if (device.working == 'Partially Working') {
+      price *= 0.70;
+    } else if (device.working == 'Not Working') {
+      price *= 0.35;
+    }
+
+    if (device.power == 'Does Not Turn On') {
+      price *= 0.40;
+    }
+
+    // --------------------------------------------------------
+    // SCREEN
+    // --------------------------------------------------------
+
+    switch (device.screen) {
+      case 'Minor Scratches':
+        price *= 0.95;
+        break;
+
+      case 'Major Scratches':
+        price *= 0.88;
+        break;
+
+      case 'Cracked':
+        price *= 0.55;
+        break;
+
+      case 'Display Issue':
+        price *= 0.45;
+        break;
+    }
+
+    // --------------------------------------------------------
+    // BODY
+    // --------------------------------------------------------
+
+    switch (device.body) {
+      case 'Minor Scratches':
+        price *= 0.97;
+        break;
+
+      case 'Heavy Damage':
+        price *= 0.88;
+        break;
+
+      case 'Back Broken':
+        price *= 0.70;
+        break;
+    }
+
+    // --------------------------------------------------------
+    // BATTERY
+    // --------------------------------------------------------
+
+    switch (device.battery) {
+      case 'Average':
+        price *= 0.95;
+        break;
+
+      case 'Poor':
+        price *= 0.82;
+        break;
+    }
+
+    // --------------------------------------------------------
+    // CAMERA
+    // --------------------------------------------------------
+
+    if (device.camera == 'Rear Camera Issue' ||
+        device.camera == 'Front Camera Issue') {
+      price *= 0.88;
+    } else if (device.camera == 'Both Camera Issue') {
+      price *= 0.72;
+    }
+
+    // --------------------------------------------------------
+    // SPEAKER / MIC
+    // --------------------------------------------------------
+
+    if (device.speakerMic == 'Speaker Issue' ||
+        device.speakerMic == 'Microphone Issue') {
+      price *= 0.92;
+    } else if (device.speakerMic == 'Both Issue') {
+      price *= 0.82;
+    }
+
+    // --------------------------------------------------------
+    // CHARGING
+    // --------------------------------------------------------
+
+    if (device.charging == 'Slow / Intermittent') {
+      price *= 0.92;
+    } else if (device.charging == 'Not Charging') {
+      price *= 0.70;
+    }
+
+    // --------------------------------------------------------
+    // CONNECTIVITY
+    // --------------------------------------------------------
+
+    if (device.connectivity == 'Issue') {
+      price *= 0.88;
+    }
+
+    // --------------------------------------------------------
+    // BIOMETRIC
+    // --------------------------------------------------------
+
+    if (device.biometric == 'Not Working') {
+      price *= 0.94;
+    }
+
+    // --------------------------------------------------------
+    // NETWORK
+    // --------------------------------------------------------
+
+    if (device.simNetwork == 'Network Issue') {
+      price *= 0.65;
+    }
+
+    // --------------------------------------------------------
+    // BILL
+    // --------------------------------------------------------
+
+    if (device.bill == 'No') {
+      price *= 0.97;
+    }
+
+    // --------------------------------------------------------
+    // WARRANTY
+    // --------------------------------------------------------
+
+    if (device.warranty == 'Yes') {
+      price *= 1.03;
+    }
+
+    // --------------------------------------------------------
+    // ACCESSORIES
+    // --------------------------------------------------------
+
+    if (device.accessories == 'Full Box + Charger') {
+      price *= 1.03;
+    } else if (device.accessories == 'Box Only') {
+      price *= 1.01;
+    } else if (device.accessories == 'No Box / Accessories') {
+      price *= 0.98;
+    }
+
+    // --------------------------------------------------------
+    // NEW MOBILE AGE CALCULATION
+    // --------------------------------------------------------
+
+    switch (device.age) {
+      case 'Below 3 Months':
+        // Almost new
+        price *= 0.98;
+        break;
+
+      case '3–6 Months':
+        price *= 0.95;
+        break;
+
+      case '6–11 Months':
+        price *= 0.92;
+        break;
+
+      case '1 Year+':
+        price *= 0.82;
+        break;
+    }
+
+    // --------------------------------------------------------
+    // REPAIR
+    // --------------------------------------------------------
+
+    if (device.repair == 'Minor Repair') {
+      price *= 0.94;
+    } else if (device.repair == 'Major Repair') {
+      price *= 0.75;
+    }
+
+    // --------------------------------------------------------
+    // WATER DAMAGE
+    // --------------------------------------------------------
+
+    if (device.waterDamage == 'Yes') {
+      price *= 0.45;
+    }
+
+    // --------------------------------------------------------
+    // FINAL PRICE
+    // --------------------------------------------------------
+
+    device.finalPrice = price.clamp(
+      500,
+      device.basePrice,
+    );
+  }
+}
+
+// ============================================================
+// QUOTE PAGE
+// ============================================================
+
+class QuotePage extends StatelessWidget {
+  const QuotePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Your Estimated Value'),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(25),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [
+                    Color(0xFF0B8F55),
+                    Color(0xFF16B66C),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(22),
+              ),
+              child: Column(
+                children: [
+                  const Text(
+                    'Estimated MobiCash Value',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                    ),
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  Text(
+                    '₹${device.finalPrice.round()}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 42,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  const Text(
+                    'Estimated price',
+                    style: TextStyle(
+                      color: Colors.white70,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            _infoCard(
+              'Device',
+              '${device.brand} ${device.model}',
+            ),
+
+            _infoCard(
+              'Storage',
+              device.storage,
+            ),
+
+            _infoCard(
+              'Mobile Age',
+              device.age,
+            ),
+
+            _infoCard(
+              'Base Value',
+              '₹${device.basePrice.round()}',
+            ),
+
+            _infoCard(
+              'Screen',
+              device.screen,
+            ),
+
+            _infoCard(
+              'Body',
+              device.body,
+            ),
+
+            _infoCard(
+              'Battery',
+              device.battery,
+            ),
+
+            const SizedBox(height: 15),
+
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: const Row(
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: Colors.orange,
+                  ),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'This is an estimated value. The final amount may change after physical inspection and verification of the device.',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 25),
+
+            SizedBox(
+              width: double.infinity,
+              height: 54,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const PhotosPage(),
+                    ),
+                  );
+                },
+                child: const Text(
+                  'Continue to Sell',
+                  style: TextStyle(fontSize: 17),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _infoCard(
+    String title,
+    String value,
+  ) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              style: TextStyle(
+                color: Colors.grey.shade600,
+              ),
+            ),
+          ),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================
+// PHOTOS PAGE
+// ============================================================
+
+class PhotosPage extends StatelessWidget {
+  const PhotosPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Device Photos'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Add photos of your device',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            Text(
+              'Photos help MobiCash verify the device condition.',
+              style: TextStyle(
+                color: Colors.grey.shade600,
+              ),
+            ),
+
+            const SizedBox(height: 25),
+
+            _photoBox(
+              Icons.camera_alt,
+              'Front Photo',
+            ),
+
+            _photoBox(
+              Icons.phone_android,
+              'Back Photo',
+            ),
+
+            _photoBox(
+              Icons.phone_iphone,
+              'Side / Damage Photo',
+            ),
+
+            const Spacer(),
+
+            SizedBox(
+              width: double.infinity,
+              height: 54,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const PickupPage(),
+                    ),
+                  );
+                },
+                child: const Text(
+                  'Continue to Pickup',
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _photoBox(
+    IconData icon,
+    String title,
+  ) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(
+          color: Colors.grey.shade200,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            color: Colors.green,
+            size: 30,
+          ),
+
+          const SizedBox(width: 15),
+
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+
+          OutlinedButton(
+            onPressed: () {},
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================
+// PICKUP PAGE
+// ============================================================
+
+class PickupPage extends StatefulWidget {
+  const PickupPage({super.key});
+
+  @override
+  State<PickupPage> createState() =>
+      _PickupPageState();
+}
+
+class _PickupPageState extends State<PickupPage> {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Pickup Method'),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'How do you want to sell?',
+              style: TextStyle(
+                fontSize: 23,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            _pickupOption(
+              'Doorstep Pickup',
+              'Our executive will visit your address.',
+              Icons.home,
+              device.pickupMethod ==
+                  'Doorstep Pickup',
+              () {
+                setState(() {
+                  device.pickupMethod =
+                      'Doorstep Pickup';
+                });
+              },
+            ),
+
+            _pickupOption(
+              'Store Visit',
+              'Bring your device to a MobiCash store.',
+              Icons.store,
+              device.pickupMethod ==
+                  'Store Visit',
+              () {
+                setState(() {
+                  device.pickupMethod =
+                      'Store Visit';
+                });
+              },
+            ),
+
+            const SizedBox(height: 25),
+
+            const Text(
+              'Select pickup date',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(height: 10),
+
+            DropdownButtonFormField<String>(
+              initialValue: device.pickupDate,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(
+                  value: 'Tomorrow',
+                  child: Text('Tomorrow'),
+                ),
+                DropdownMenuItem(
+                  value: 'Day After Tomorrow',
+                  child: Text(
+                    'Day After Tomorrow',
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'Within 3 Days',
+                  child: Text(
+                    'Within 3 Days',
+                  ),
+                ),
+              ],
+              onChanged: (v) {
+                setState(() {
+                  device.pickupDate = v!;
+                });
+              },
+            ),
+
+            const SizedBox(height: 20),
+
+            const Text(
+              'Select time slot',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(height: 10),
+
+            DropdownButtonFormField<String>(
+              initialValue: device.pickupTime,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(
+                  value: '10 AM – 1 PM',
+                  child: Text(
+                    '10 AM – 1 PM',
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: '1 PM – 4 PM',
+                  child: Text(
+                    '1 PM – 4 PM',
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: '4 PM – 7 PM',
+                  child: Text(
+                    '4 PM – 7 PM',
+                  ),
+                ),
+              ],
+              onChanged: (v) {
+                setState(() {
+                  device.pickupTime = v!;
+                });
+              },
+            ),
+
+            const SizedBox(height: 30),
+
+            SizedBox(
+              width: double.infinity,
+              height: 54,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          const ContactPage(),
+                    ),
+                  );
+                },
+                child: const Text('Continue'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _pickupOption(
+    String title,
+    String subtitle,
+    IconData icon,
+    bool selected,
+    VoidCallback onTap,
+  ) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin:
+            const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: selected
+              ? Colors.green.shade50
+              : Colors.white,
+          borderRadius:
+              BorderRadius.circular(18),
+          border: Border.all(
+            color: selected
+                ? Colors.green
+                : Colors.grey.shade200,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 35,
+              color: Colors.green.shade700,
+            ),
+
+            const SizedBox(width: 15),
+
+            Expanded(
+              child: Column(
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight:
+                          FontWeight.bold,
+                      fontSize: 17,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color:
+                          Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            if (selected)
+              const Icon(
+                Icons.check_circle,
+                color: Colors.green,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// CONTACT PAGE
+// ============================================================
+
+class ContactPage extends StatefulWidget {
+  const ContactPage({super.key});
+
+  @override
+  State<ContactPage> createState() =>
+      _ContactPageState();
+}
+
+class _ContactPageState
+    extends State<ContactPage> {
+  final nameController =
+      TextEditingController();
+
+  final phoneController =
+      TextEditingController();
+
+  final addressController =
+      TextEditingController();
+
+  final cityController =
+      TextEditingController();
+
+  final pincodeController =
+      TextEditingController();
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    phoneController.dispose();
+    addressController.dispose();
+    cityController.dispose();
+    pincodeController.dispose();
+
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Your Details'),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          children: [
+            const Text(
+              'Where should we pick up your device?',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            _field(
+              nameController,
+              'Full Name',
+              Icons.person,
+            ),
+
+            _field(
+              phoneController,
+              'Phone Number',
+              Icons.phone,
+              keyboardType:
+                  TextInputType.phone,
+            ),
+
+            _field(
+              addressController,
+              'Full Address',
+              Icons.home,
+              maxLines: 3,
+            ),
+
+            _field(
+              cityController,
+              'City',
+              Icons.location_city,
+            ),
+
+            _field(
+              pincodeController,
+              'Pincode',
+              Icons.pin_drop,
+              keyboardType:
+                  TextInputType.number,
+            ),
+
+            const SizedBox(height: 15),
+
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Payment Method',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 10),
+
+            DropdownButtonFormField<String>(
+              initialValue: device.paymentMethod,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(
+                  value: 'UPI',
+                  child: Text('UPI'),
+                ),
+                DropdownMenuItem(
+                  value: 'Bank Transfer',
+                  child: Text(
+                    'Bank Transfer',
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'Cash',
+                  child: Text('Cash'),
+                ),
+              ],
+              onChanged: (v) {
+                device.paymentMethod = v!;
+              },
+            ),
+
+            const SizedBox(height: 30),
+
+            SizedBox(
+              width: double.infinity,
+              height: 54,
+              child: ElevatedButton(
+                onPressed: () {
+                  if (nameController.text
+                          .trim()
+                          .isEmpty ||
+                      phoneController.text
+                          .trim()
+                          .isEmpty ||
+                      addressController.text
+                          .trim()
+                          .isEmpty ||
+                      cityController.text
+                          .trim()
+                          .isEmpty ||
+                      pincodeController.text
+                          .trim()
+                          .isEmpty) {
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Please fill all details',
+                        ),
+                      ),
+                    );
+                    return;
+                  }
+
+                  device.name =
+                      nameController.text;
+
+                  device.phone =
+                      phoneController.text;
+
+                  device.address =
+                      addressController.text;
+
+                  device.city =
+                      cityController.text;
+
+                  device.pincode =
+                      pincodeController.text;
+
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          const ReviewPage(),
+                    ),
+                  );
+                },
+                child:
+                    const Text('Review Sale'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _field(
+    TextEditingController controller,
+    String label,
+    IconData icon, {
+    TextInputType? keyboardType,
+    int maxLines = 1,
+  }) {
+    return Padding(
+      padding:
+          const EdgeInsets.only(bottom: 14),
+      child: TextField(
+        controller: controller,
+        keyboardType: keyboardType,
+        maxLines: maxLines,
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: Icon(icon),
+          border:
+              const OutlineInputBorder(),
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// REVIEW PAGE
+// ============================================================
+
+class ReviewPage extends StatelessWidget {
+  const ReviewPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Review Sale'),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
+          children: [
+            _section(
+              'Device',
+              [
+                _row(
+                  'Brand',
+                  device.brand,
+                ),
+                _row(
+                  'Model',
+                  device.model,
+                ),
+                _row(
+                  'Storage',
+                  device.storage,
+                ),
+                _row(
+                  'Age',
+                  device.age,
+                ),
+              ],
+            ),
+
+            _section(
+              'Condition',
+              [
+                _row(
+                  'Working',
+                  device.working,
+                ),
+                _row(
+                  'Power',
+                  device.power,
+                ),
+                _row(
+                  'Screen',
+                  device.screen,
+                ),
+                _row(
+                  'Body',
+                  device.body,
+                ),
+                _row(
+                  'Battery',
+                  device.battery,
+                ),
+                _row(
+                  'Camera',
+                  device.camera,
+                ),
+                _row(
+                  'Speaker/Mic',
+                  device.speakerMic,
+                ),
+                _row(
+                  'Charging',
+                  device.charging,
+                ),
+                _row(
+                  'Connectivity',
+                  device.connectivity,
+                ),
+                _row(
+                  'Biometric',
+                  device.biometric,
+                ),
+                _row(
+                  'Network',
+                  device.simNetwork,
+                ),
+                _row(
+                  'Bill',
+                  device.bill,
+                ),
+                _row(
+                  'Warranty',
+                  device.warranty,
+                ),
+                _row(
+                  'Accessories',
+                  device.accessories,
+                ),
+                _row(
+                  'Repairs',
+                  device.repair,
+                ),
+                _row(
+                  'Water Damage',
+                  device.waterDamage,
+                ),
+              ],
+            ),
+
+            _section(
+              'Pickup',
+              [
+                _row(
+                  'Method',
+                  device.pickupMethod,
+                ),
+                _row(
+                  'Date',
+                  device.pickupDate,
+                ),
+                _row(
+                  'Time',
+                  device.pickupTime,
+                ),
+              ],
+            ),
+
+            _section(
+              'Customer',
+              [
+                _row(
+                  'Name',
+                  device.name,
+                ),
+                _row(
+                  'Phone',
+                  device.phone,
+                ),
+                _row(
+                  'Address',
+                  device.address,
+                ),
+                _row(
+                  'City',
+                  device.city,
+                ),
+                _row(
+                  'Pincode',
+                  device.pincode,
+                ),
+                _row(
+                  'Payment',
+                  device.paymentMethod,
+                ),
+              ],
+            ),
+
+            Container(
+              width: double.infinity,
+              margin:
+                  const EdgeInsets.only(top: 5),
+              padding:
+                  const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius:
+                    BorderRadius.circular(18),
+              ),
+              child: Column(
+                children: [
+                  const Text(
+                    'Estimated Sale Value',
+                    style: TextStyle(
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '₹${device.finalPrice.round()}',
+                    style: TextStyle(
+                      fontSize: 34,
+                      fontWeight:
+                          FontWeight.bold,
+                      color:
+                          Colors.green.shade800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 25),
+
+            SizedBox(
+              width: double.infinity,
+              height: 55,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          const ConfirmationPage(),
+                    ),
+                    (route) => false,
+                  );
+                },
+                child: const Text(
+                  'Confirm Sale',
+                  style: TextStyle(
+                    fontSize: 17,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _section(
+    String title,
+    List<Widget> children,
+  ) {
+    return Container(
+      width: double.infinity,
+      margin:
+          const EdgeInsets.only(bottom: 15),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius:
+            BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          ...children,
+        ],
+      ),
+    );
+  }
+
+  Widget _row(
+    String title,
+    String value,
+  ) {
+    return Padding(
+      padding:
+          const EdgeInsets.only(bottom: 9),
+      child: Row(
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text(
+              title,
+              style: TextStyle(
+                color:
+                    Colors.grey.shade600,
+              ),
+            ),
+          ),
+
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontWeight:
+                    FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================
+// CONFIRMATION PAGE
+// ============================================================
+
+class ConfirmationPage extends StatelessWidget {
+  const ConfirmationPage({super.key});
+
+  String getOrderId() {
+    return 'MC${DateTime.now().millisecondsSinceEpoch.toString().substring(6)}';
+  }
+
+  Future<void> saveOrder(String orderId) async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      throw Exception('User not logged in');
+    }
+
+    await FirebaseFirestore.instance
+        .collection('orders')
+        .doc(orderId)
+        .set({
+      'orderId': orderId,
+
+      // USER
+      'userId': user.uid,
+      'phoneNumber': user.phoneNumber,
+
+      // DEVICE
+      'deviceType': device.type,
+      'brand': device.brand,
+      'model': device.model,
+      'storage': device.storage,
+
+      // PRICE
+      'basePrice': device.basePrice,
+      'finalPrice': device.finalPrice,
+
+      // PICKUP
+      'pickupMethod': device.pickupMethod,
+      'pickupDate': device.pickupDate,
+      'pickupTime': device.pickupTime,
+
+      // ADDRESS
+      'address': device.address,
+      'city': device.city,
+      'pincode': device.pincode,
+
+      // PAYMENT
+      'paymentMethod': device.paymentMethod,
+
+      // STATUS
+'status': 'New',
+
+      // CREATED TIME
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final orderId = getOrderId();
+
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(25),
+            child: Column(
+              children: [
+                // SUCCESS ICON
+                Container(
+                  width: 90,
+                  height: 90,
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade100,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.check,
+                    size: 55,
+                    color: Colors.green,
+                  ),
+                ),
+
+                const SizedBox(height: 25),
+
+                const Text(
+                  'Sale Request Confirmed!',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+
+                const SizedBox(height: 10),
+
+                Text(
+                  'Your ${device.brand} ${device.model} sale request has been created.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: 15,
+                  ),
+                ),
+
+                const SizedBox(height: 25),
+
+                // ORDER DETAILS
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        'Order ID',
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+
+                      const SizedBox(height: 7),
+
+                      Text(
+                        orderId,
+                        style: const TextStyle(
+                          fontSize: 21,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+
+                      const Divider(height: 30),
+
+                      Text(
+                        'Estimated Value',
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+
+                      const SizedBox(height: 5),
+
+                      Text(
+                        '₹${device.finalPrice.round()}',
+                        style: TextStyle(
+                          fontSize: 30,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // PICKUP DETAILS
+                Text(
+                  '${device.pickupMethod}\n'
+                  '${device.pickupDate} • ${device.pickupTime}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+
+                const SizedBox(height: 30),
+
+                // SAVE ORDER BUTTON
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      try {
+                        await saveOrder(orderId);
+
+                        if (!context.mounted) return;
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Order saved successfully!',
+                            ),
+                          ),
+                        );
+
+                        Navigator.pushAndRemoveUntil(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const HomePage(),
+                          ),
+                          (route) => false,
+                        );
+                      } catch (e) {
+                        if (!context.mounted) return;
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Failed to save order: $e',
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                    child: const Text(
+                      'Back to Home',
+                      style: TextStyle(
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class ProfilePage extends StatelessWidget {
+  const ProfilePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Profile'),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            const SizedBox(height: 20),
+
+            CircleAvatar(
+              radius: 45,
+              backgroundColor: Colors.green.shade100,
+              child: Icon(
+                Icons.person,
+                size: 55,
+                color: Colors.green.shade700,
+              ),
+            ),
+
+            const SizedBox(height: 15),
+
+            const Text(
+              'MobiCash User',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            Text(
+              user?.phoneNumber ?? '-',
+              style: TextStyle(
+                color: Colors.grey.shade600,
+              ),
+            ),
+
+            const SizedBox(height: 30),
+
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.phone),
+                title: const Text(
+                  'Mobile Number',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                subtitle: Text(
+                  user?.phoneNumber ?? '-',
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // MY ORDERS
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.receipt_long),
+                title: const Text(
+                  'My Orders',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                subtitle: const Text(
+                  'View your device selling orders',
+                ),
+                trailing: const Icon(
+                  Icons.arrow_forward_ios,
+                  size: 18,
+                ),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const MyOrdersPage(),
+                    ),
+                  );
+                },
+              ),
+            ),
+
+            const SizedBox(height: 25),
+
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  await FirebaseAuth.instance.signOut();
+
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                  }
+                },
+                icon: const Icon(Icons.logout),
+                label: const Text('Logout'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
